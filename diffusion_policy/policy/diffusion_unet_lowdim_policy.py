@@ -24,6 +24,7 @@ class DiffusionUnetLowdimPolicy(BaseLowdimPolicy):
             obs_as_global_cond=False,
             pred_action_steps_only=False,
             oa_step_convention=False,
+            global_cond_noise=None,
             # parameters passed to step
             **kwargs):
         super().__init__()
@@ -49,6 +50,7 @@ class DiffusionUnetLowdimPolicy(BaseLowdimPolicy):
         self.obs_as_global_cond = obs_as_global_cond
         self.pred_action_steps_only = pred_action_steps_only
         self.oa_step_convention = oa_step_convention
+        self.global_cond_noise = global_cond_noise
         self.kwargs = kwargs
 
         if num_inference_steps is None:
@@ -65,6 +67,10 @@ class DiffusionUnetLowdimPolicy(BaseLowdimPolicy):
             ):
         model = self.model
         scheduler = self.noise_scheduler
+
+        if self.global_cond_noise is not None:
+            cond_noise = torch.rand(global_cond.shape, device=global_cond.device)
+            global_cond = global_cond + cond_noise
 
         trajectory = torch.randn(
             size=condition_data.shape, 
@@ -232,8 +238,14 @@ class DiffusionUnetLowdimPolicy(BaseLowdimPolicy):
 
         # apply conditioning
         noisy_trajectory[condition_mask] = trajectory[condition_mask]
+
+        # add global noise if applicable
+        if self.global_cond_noise is not None:
+            cond_noise = torch.rand(global_cond.shape, device=global_cond.device)
+            global_cond = global_cond + cond_noise
         
         # Predict the noise residual
+
         pred = self.model(noisy_trajectory, timesteps, 
             local_cond=local_cond, global_cond=global_cond)
 
