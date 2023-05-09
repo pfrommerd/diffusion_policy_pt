@@ -19,7 +19,7 @@ past_action_visible: False
 keypoint_visible_rate: 1.0
 obs_as_local_cond: False
 obs_as_global_cond: True
-global_cond_noise: 0.02
+global_cond_noise: 0
 pred_action_steps_only: False
 
 policy:
@@ -98,7 +98,7 @@ training:
   # optimization
   lr_scheduler: cosine
   lr_warmup_steps: 500
-  num_epochs: 5000
+  num_epochs: 400
   gradient_accumulate_every: 1
   use_ema: True
   # training loop control

@@ -68,7 +68,7 @@ class DiffusionUnetLowdimPolicy(BaseLowdimPolicy):
         model = self.model
         scheduler = self.noise_scheduler
 
-        if self.global_cond_noise is not None:
+        if self.global_cond_noise:
             cond_noise = torch.rand(global_cond.shape, device=global_cond.device)
             global_cond = global_cond + cond_noise
 
@@ -240,7 +240,7 @@ class DiffusionUnetLowdimPolicy(BaseLowdimPolicy):
         noisy_trajectory[condition_mask] = trajectory[condition_mask]
 
         # add global noise if applicable
-        if self.global_cond_noise is not None:
+        if self.global_cond_noise:
             cond_noise = torch.rand(global_cond.shape, device=global_cond.device)
             global_cond = global_cond + cond_noise
         

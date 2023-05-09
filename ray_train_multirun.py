@@ -28,6 +28,8 @@ OmegaConf.register_new_resolver("eval", eval, replace=True)
 @click.option('--config-name', '-cn', required=True, type=str)
 @click.option('--config-dir', '-cd', default=None, type=str)
 @click.option('--seeds', '-s', default='42,43,44', type=str)
+@click.option('--max_train_episodes', '-mte', default=None, type=str)
+@click.option('--global_cond_noises', '-gcn', default=None, type=str)
 @click.option('--monitor_key', '-k', multiple=True, default=['test/mean_score'])
 @click.option('--ray_address', '-ra', default='auto')
 @click.option('--num_cpus', '-nc', default=7, type=float)
@@ -38,12 +40,21 @@ OmegaConf.register_new_resolver("eval", eval, replace=True)
 @click.option('--unbuffer_python', '-u', is_flag=True, default=False)
 @click.option('--single_node', '-sn', is_flag=True, default=False, help='run all experiments on a single machine')
 @click.argument('command_args', nargs=-1, type=str)
-def main(config_name, config_dir, seeds, monitor_key, ray_address, 
+def main(config_name, config_dir, 
+         seeds, max_train_episodes, global_cond_noises, monitor_key, ray_address, 
     num_cpus, num_gpus, max_retries, monitor_max_retires,
     data_src, unbuffer_python, 
     single_node, command_args):
     # parse args
     seeds = [int(x) for x in seeds.split(',')]
+    if global_cond_noises is not None:
+        global_cond_noises = [float(x) for x in global_cond_noises.split(',')]
+    else:
+        global_cond_noises = [None]
+    if max_train_episodes is not None:
+        max_train_episodes = [int(x) for x in max_train_episodes.split(',')]
+    else:
+        max_train_episodes = [None]
     # expand path
     if data_src is not None:
         data_src = os.path.abspath(os.path.expanduser(data_src))
@@ -98,30 +109,46 @@ def main(config_name, config_dir, seeds, monitor_key, ray_address,
 
         # generate command args
         run_command_args = list()
-        for i, seed in enumerate(seeds):
-            test_start_seed = (seed + 1) * 100000
-            this_output_dir = output_dir.joinpath(f'train_{i}')
-            this_output_dir.mkdir()
-            wandb_name = name_base + f'_train_{i}'
-            wandb_run_id = wandb_group_id + f'_train_{i}'
+        for num_data in max_train_episodes:
+            for gcn in global_cond_noises:
+                for si, seed in enumerate(seeds):
+                    test_start_seed = (seed + 1) * 100000
+                    p = 'train'
+                    if num_data is not None:
+                        p = f'{p}_n{num_data}'
+                    if gcn is not None:
+                        p = f'{p}_s{gcn}'
+                    p = f'{p}_{si}'
+                    this_output_dir = output_dir.joinpath(p)
+                    this_output_dir.mkdir()
+                    wandb_name = name_base + f'_{p}'
+                    wandb_run_id = wandb_group_id + f'_{p}'
 
-            this_command_args = [
-                'python',
-                'train.py',
-                '--config-name='+config_name,
-                '--config-dir='+config_path_rel
-            ]
+                    this_command_args = [
+                        'python',
+                        'train.py',
+                        '--config-name='+config_name,
+                        '--config-dir='+config_path_rel
+                    ]
 
-            this_command_args.extend(command_args)
-            this_command_args.extend([
-                f'training.seed={seed}',
-                f'task.env_runner.test_start_seed={test_start_seed}',
-                f'logging.name={wandb_name}',
-                f'logging.id={wandb_run_id}',
-                f'logging.group={wandb_group_id}',
-                f'hydra.run.dir={this_output_dir}'
-            ])
-            run_command_args.append(this_command_args)
+                    this_command_args.extend(command_args)
+                    if gcn is not None:
+                        this_command_args.extend([
+                            f'global_cond_noise={gcn}'
+                        ])
+                    if num_data is not None:
+                        this_command_args.extend([
+                            f'task.dataset.max_train_episodes={num_data}'
+                        ])
+                    this_command_args.extend([
+                        f'training.seed={seed}',
+                        f'task.env_runner.test_start_seed={test_start_seed}',
+                        f'logging.name={wandb_name}',
+                        f'logging.id={wandb_run_id}',
+                        f'logging.group={wandb_group_id}',
+                        f'hydra.run.dir={this_output_dir}'
+                    ])
+                    run_command_args.append(this_command_args)
 
     # init ray
     root_dir = os.path.dirname(__file__)
