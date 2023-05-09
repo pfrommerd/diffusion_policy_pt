@@ -31,7 +31,7 @@ policy:
     local_cond_dim: "${eval: ${task.obs_dim} if ${obs_as_local_cond} else None}"
     global_cond_dim: "${eval: ${task.obs_dim}*${n_obs_steps} if ${obs_as_global_cond} else None}"
     diffusion_step_embed_dim: 128
-    down_dims: [64, 128, 256]
+    down_dims: [128, 256, 512]
     kernel_size: 5
     n_groups: 8
     cond_predict_scale: True
@@ -98,7 +98,7 @@ training:
   # optimization
   lr_scheduler: cosine
   lr_warmup_steps: 500
-  num_epochs: 400
+  num_epochs: 600
   gradient_accumulate_every: 1
   use_ema: True
   # training loop control

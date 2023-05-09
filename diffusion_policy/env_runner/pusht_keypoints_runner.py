@@ -21,10 +21,10 @@ class PushTKeypointsRunner(BaseLowdimRunner):
     def __init__(self,
             output_dir,
             keypoint_visible_rate=1.0,
-            n_train=10,
+            n_train=8,
             n_train_vis=3,
             train_start_seed=0,
-            n_test=22,
+            n_test=20,
             n_test_vis=6,
             legacy_test=False,
             test_start_seed=10000,
@@ -42,7 +42,7 @@ class PushTKeypointsRunner(BaseLowdimRunner):
         super().__init__(output_dir)
 
         if n_envs is None:
-            n_envs = n_train + n_test
+            n_envs = 2*(n_train + n_test)
 
         # handle latency step
         # to mimic latency, we request n_latency_steps additional steps 
@@ -79,59 +79,70 @@ class PushTKeypointsRunner(BaseLowdimRunner):
 
         env_fns = [env_fn] * n_envs
         env_seeds = list()
+        env_replicas = list()
         env_prefixs = list()
         env_init_fn_dills = list()
         # train
         for i in range(n_train):
-            seed = train_start_seed + i
-            enable_render = i < n_train_vis
+            for replica in [False, True]:
+                seed = train_start_seed + i
+                enable_render = i < n_train_vis
 
-            def init_fn(env, seed=seed, enable_render=enable_render):
-                # setup rendering
-                # video_wrapper
-                assert isinstance(env.env, VideoRecordingWrapper)
-                env.env.video_recoder.stop()
-                env.env.file_path = None
-                if enable_render:
-                    filename = pathlib.Path(output_dir).joinpath(
-                        'media', wv.util.generate_id() + ".mp4")
-                    filename.parent.mkdir(parents=False, exist_ok=True)
-                    filename = str(filename)
-                    env.env.file_path = filename
+                def init_fn(env, seed=seed, enable_render=enable_render):
+                    # setup rendering
+                    # video_wrapper
+                    assert isinstance(env.env, VideoRecordingWrapper)
+                    env.env.video_recoder.stop()
+                    env.env.file_path = None
+                    if enable_render:
+                        filename = pathlib.Path(output_dir).joinpath(
+                            'media', wv.util.generate_id() + ".mp4")
+                        filename.parent.mkdir(parents=False, exist_ok=True)
+                        filename = str(filename)
+                        env.env.file_path = filename
 
-                # set seed
-                assert isinstance(env, MultiStepWrapper)
-                env.seed(seed)
-            
-            env_seeds.append(seed)
-            env_prefixs.append('train/')
-            env_init_fn_dills.append(dill.dumps(init_fn))
+                    # set seed
+                    assert isinstance(env, MultiStepWrapper)
+                    env.seed(seed)
+                
+                env_seeds.append(seed)
+                env_replicas.append(replica)
+                if replica:
+                    env_prefixs.append('train/replica_')
+                else:
+                    env_prefixs.append('train/deconv_')
+                env_init_fn_dills.append(dill.dumps(init_fn))
 
         # test
         for i in range(n_test):
-            seed = test_start_seed + i
-            enable_render = i < n_test_vis
+            for replica in [False, True]:
+                seed = test_start_seed + i
+                enable_render = i < n_test_vis
 
-            def init_fn(env, seed=seed, enable_render=enable_render):
-                # setup rendering
-                # video_wrapper
-                assert isinstance(env.env, VideoRecordingWrapper)
-                env.env.video_recoder.stop()
-                env.env.file_path = None
-                if enable_render:
-                    filename = pathlib.Path(output_dir).joinpath(
-                        'media', wv.util.generate_id() + ".mp4")
-                    filename.parent.mkdir(parents=False, exist_ok=True)
-                    filename = str(filename)
-                    env.env.file_path = filename
+                def init_fn(env, seed=seed, enable_render=enable_render):
+                    # setup rendering
+                    # video_wrapper
+                    assert isinstance(env.env, VideoRecordingWrapper)
+                    env.env.video_recoder.stop()
+                    env.env.file_path = None
+                    if enable_render:
+                        filename = pathlib.Path(output_dir).joinpath(
+                            'media', wv.util.generate_id() + ".mp4")
+                        filename.parent.mkdir(parents=False, exist_ok=True)
+                        filename = str(filename)
+                        env.env.file_path = filename
 
-                # set seed
-                assert isinstance(env, MultiStepWrapper)
-                env.seed(seed)
+                    # set seed
+                    assert isinstance(env, MultiStepWrapper)
+                    env.seed(seed)
 
-            env_seeds.append(seed)
-            env_prefixs.append('test/')
-            env_init_fn_dills.append(dill.dumps(init_fn))
+                env_seeds.append(seed)
+                env_replicas.append(replica)
+                if replica:
+                    env_prefixs.append('test/replica_')
+                else:
+                    env_prefixs.append('test/deconv_')
+                env_init_fn_dills.append(dill.dumps(init_fn))
 
         env = AsyncVectorEnv(env_fns)
 
@@ -145,6 +156,7 @@ class PushTKeypointsRunner(BaseLowdimRunner):
         self.env_fns = env_fns
         self.env_seeds = env_seeds
         self.env_prefixs = env_prefixs
+        self.env_replicas = env_replicas
         self.env_init_fn_dills = env_init_fn_dills
         self.fps = fps
         self.crf = crf
@@ -168,6 +180,7 @@ class PushTKeypointsRunner(BaseLowdimRunner):
         n_chunks = math.ceil(n_inits / n_envs)
 
         # allocate data
+        replicas = torch.tensor(self.env_replicas, device=device)
         all_video_paths = [None] * n_inits
         all_rewards = [None] * n_inits
 
@@ -216,7 +229,7 @@ class PushTKeypointsRunner(BaseLowdimRunner):
 
                 # run policy
                 with torch.no_grad():
-                    action_dict = policy.predict_action(obs_dict)
+                    action_dict = policy.predict_action(obs_dict, replicas=replicas)
 
                 # device_transfer
                 np_action_dict = dict_apply(action_dict,
@@ -249,7 +262,12 @@ class PushTKeypointsRunner(BaseLowdimRunner):
             max_reward = np.max(all_rewards[i])
             max_rewards[prefix].append(max_reward)
             log_data[prefix+f'sim_max_reward_{seed}'] = max_reward
-
+            if prefix.startswith("test/replica_"):
+                max_rewards["test/"].append(max_reward)
+                log_data["test/"+f'sim_max_reward_{seed}'] = max_reward
+            if prefix.startswith("train/replica_"):
+                max_rewards["train/"].append(max_reward)
+                log_data["train/"+f'sim_max_reward_{seed}'] = max_reward
             # visualize sim
             video_path = all_video_paths[i]
             if video_path is not None:

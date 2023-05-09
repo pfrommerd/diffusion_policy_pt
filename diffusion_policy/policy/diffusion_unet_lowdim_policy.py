@@ -61,15 +61,16 @@ class DiffusionUnetLowdimPolicy(BaseLowdimPolicy):
     def conditional_sample(self, 
             condition_data, condition_mask,
             local_cond=None, global_cond=None,
-            generator=None,
+            generator=None, replicas=None,
             # keyword arguments to scheduler.step
             **kwargs
             ):
         model = self.model
         scheduler = self.noise_scheduler
 
-        if self.global_cond_noise:
-            cond_noise = torch.rand(global_cond.shape, device=global_cond.device)
+        if self.global_cond_noise and replicas is not None:
+            cond_noise = self.global_cond_noise*torch.rand(global_cond.shape, device=global_cond.device)
+            cond_noise = torch.unsqueeze(replicas, -1)*cond_noise
             global_cond = global_cond + cond_noise
 
         trajectory = torch.randn(
@@ -102,7 +103,7 @@ class DiffusionUnetLowdimPolicy(BaseLowdimPolicy):
         return trajectory
 
 
-    def predict_action(self, obs_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def predict_action(self, obs_dict: Dict[str, torch.Tensor], replicas=None) -> Dict[str, torch.Tensor]:
         """
         obs_dict: must include "obs" key
         result: must include "action" key
@@ -154,6 +155,7 @@ class DiffusionUnetLowdimPolicy(BaseLowdimPolicy):
             cond_mask,
             local_cond=local_cond,
             global_cond=global_cond,
+            replicas=replicas,
             **self.kwargs)
         
         # unnormalize prediction
@@ -241,7 +243,7 @@ class DiffusionUnetLowdimPolicy(BaseLowdimPolicy):
 
         # add global noise if applicable
         if self.global_cond_noise:
-            cond_noise = torch.rand(global_cond.shape, device=global_cond.device)
+            cond_noise = self.global_cond_noise*torch.rand(global_cond.shape, device=global_cond.device)
             global_cond = global_cond + cond_noise
         
         # Predict the noise residual
