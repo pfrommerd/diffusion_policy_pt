@@ -143,17 +143,51 @@ class RobomimicLowdimRunner(BaseLowdimRunner):
 
         env_fns = [env_fn] * n_envs
         env_seeds = list()
+        env_replicas = list()
         env_prefixs = list()
         env_init_fn_dills = list()
 
         # train
         with h5py.File(dataset_path, 'r') as f:
             for i in range(n_train):
-                train_idx = train_start_idx + i
-                enable_render = i < n_train_vis
-                init_state = f[f'data/demo_{train_idx}/states'][0]
+                for replica in [False, True]:
+                    train_idx = train_start_idx + i
+                    enable_render = i < n_train_vis
+                    init_state = f[f'data/demo_{train_idx}/states'][0]
 
-                def init_fn(env, init_state=init_state, 
+                    def init_fn(env, init_state=init_state, 
+                        enable_render=enable_render):
+                        # setup rendering
+                        # video_wrapper
+                        assert isinstance(env.env, VideoRecordingWrapper)
+                        env.env.video_recoder.stop()
+                        env.env.file_path = None
+                        if enable_render:
+                            filename = pathlib.Path(output_dir).joinpath(
+                                'media', wv.util.generate_id() + ".mp4")
+                            filename.parent.mkdir(parents=False, exist_ok=True)
+                            filename = str(filename)
+                            env.env.file_path = filename
+
+                        # switch to init_state reset
+                        assert isinstance(env.env.env, RobomimicLowdimWrapper)
+                        env.env.env.init_state = init_state
+
+                    env_seeds.append(train_idx)
+                    env_replicas.append(replica)
+                    if replica:
+                        env_prefixs.append('train/replica_')
+                    else:
+                        env_prefixs.append('train/deconv_')
+                    env_init_fn_dills.append(dill.dumps(init_fn))
+        
+        # test
+        for i in range(n_test):
+            for replica in [False, True]:
+                seed = test_start_seed + i
+                enable_render = i < n_test_vis
+
+                def init_fn(env, seed=seed, 
                     enable_render=enable_render):
                     # setup rendering
                     # video_wrapper
@@ -167,41 +201,18 @@ class RobomimicLowdimRunner(BaseLowdimRunner):
                         filename = str(filename)
                         env.env.file_path = filename
 
-                    # switch to init_state reset
+                    # switch to seed reset
                     assert isinstance(env.env.env, RobomimicLowdimWrapper)
-                    env.env.env.init_state = init_state
+                    env.env.env.init_state = None
+                    env.seed(seed)
 
-                env_seeds.append(train_idx)
-                env_prefixs.append('train/')
+                env_seeds.append(seed)
+                env_replicas.append(replica)
+                if replica:
+                    env_prefixs.append('test/replica_')
+                else:
+                    env_prefixs.append('test/deconv_')
                 env_init_fn_dills.append(dill.dumps(init_fn))
-        
-        # test
-        for i in range(n_test):
-            seed = test_start_seed + i
-            enable_render = i < n_test_vis
-
-            def init_fn(env, seed=seed, 
-                enable_render=enable_render):
-                # setup rendering
-                # video_wrapper
-                assert isinstance(env.env, VideoRecordingWrapper)
-                env.env.video_recoder.stop()
-                env.env.file_path = None
-                if enable_render:
-                    filename = pathlib.Path(output_dir).joinpath(
-                        'media', wv.util.generate_id() + ".mp4")
-                    filename.parent.mkdir(parents=False, exist_ok=True)
-                    filename = str(filename)
-                    env.env.file_path = filename
-
-                # switch to seed reset
-                assert isinstance(env.env.env, RobomimicLowdimWrapper)
-                env.env.env.init_state = None
-                env.seed(seed)
-
-            env_seeds.append(seed)
-            env_prefixs.append('test/')
-            env_init_fn_dills.append(dill.dumps(init_fn))
         
         env = AsyncVectorEnv(env_fns)
         # env = SyncVectorEnv(env_fns)
@@ -209,6 +220,7 @@ class RobomimicLowdimRunner(BaseLowdimRunner):
         self.env_meta = env_meta
         self.env = env
         self.env_fns = env_fns
+        self.env_replicas = []
         self.env_seeds = env_seeds
         self.env_prefixs = env_prefixs
         self.env_init_fn_dills = env_init_fn_dills
@@ -236,6 +248,7 @@ class RobomimicLowdimRunner(BaseLowdimRunner):
         n_chunks = math.ceil(n_inits / n_envs)
 
         # allocate data
+        replicas = torch.tensor(self.env_replicas, device=device)
         all_video_paths = [None] * n_inits
         all_rewards = [None] * n_inits
 
@@ -284,7 +297,7 @@ class RobomimicLowdimRunner(BaseLowdimRunner):
 
                 # run policy
                 with torch.no_grad():
-                    action_dict = policy.predict_action(obs_dict)
+                    action_dict = policy.predict_action(obs_dict, replicas=replicas)
 
                 # device_transfer
                 np_action_dict = dict_apply(action_dict,
@@ -323,6 +336,12 @@ class RobomimicLowdimRunner(BaseLowdimRunner):
             max_reward = np.max(all_rewards[i])
             max_rewards[prefix].append(max_reward)
             log_data[prefix+f'sim_max_reward_{seed}'] = max_reward
+            if prefix.startswith("test/replica_"):
+                max_rewards["test/"].append(max_reward)
+                log_data["test/"+f'sim_max_reward_{seed}'] = max_reward
+            if prefix.startswith("train/replica_"):
+                max_rewards["train/"].append(max_reward)
+                log_data["train/"+f'sim_max_reward_{seed}'] = max_reward
 
             # visualize sim
             video_path = all_video_paths[i]
