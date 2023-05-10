@@ -14,11 +14,11 @@ env_runner:
   _target_: diffusion_policy.env_runner.robomimic_lowdim_runner.RobomimicLowdimRunner
   dataset_path: *dataset_path
   obs_keys: *obs_keys
-  n_train: 6
+  n_train: 3
   n_train_vis: 2
   train_start_idx: 0
-  n_test: 50
-  n_test_vis: 4
+  n_test: 25
+  n_test_vis: 2
   test_start_seed: 100000
   # use python's eval function as resolver, single-quoted string as argument
   max_steps: ${eval:'500 if "${task.dataset_type}" == "mh" else 400'}
