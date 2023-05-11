@@ -45,3 +45,4 @@ dataset:
   rotation_rep: rotation_6d
   seed: 42
   val_ratio: 0.02
+  max_train_episodes: 200

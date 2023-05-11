@@ -8,6 +8,9 @@ command:
   - ${args_no_hyphens}
 method: grid
 parameters:
+  task:
+    value:
+      - can_lowdim_abs
   training.seed:
     values:
      - 42
