@@ -87,8 +87,7 @@ class RobomimicLowdimRunner(BaseLowdimRunner):
 
         super().__init__(output_dir)
 
-        if n_envs is None:
-            n_envs = n_train + n_test
+        n_envs = 2*(n_train + n_test)
 
         # handle latency step
         # to mimic latency, we request n_latency_steps additional steps 
@@ -152,7 +151,7 @@ class RobomimicLowdimRunner(BaseLowdimRunner):
             for i in range(n_train):
                 for replica in [False, True]:
                     train_idx = train_start_idx + i
-                    enable_render = i < n_train_vis
+                    enable_render = False
                     init_state = f[f'data/demo_{train_idx}/states'][0]
 
                     def init_fn(env, init_state=init_state, 
@@ -185,7 +184,7 @@ class RobomimicLowdimRunner(BaseLowdimRunner):
         for i in range(n_test):
             for replica in [False, True]:
                 seed = test_start_seed + i
-                enable_render = i < n_test_vis
+                enable_render = False
 
                 def init_fn(env, seed=seed, 
                     enable_render=enable_render):
@@ -220,7 +219,7 @@ class RobomimicLowdimRunner(BaseLowdimRunner):
         self.env_meta = env_meta
         self.env = env
         self.env_fns = env_fns
-        self.env_replicas = []
+        self.env_replicas = env_replicas
         self.env_seeds = env_seeds
         self.env_prefixs = env_prefixs
         self.env_init_fn_dills = env_init_fn_dills

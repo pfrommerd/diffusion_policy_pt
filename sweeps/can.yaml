@@ -1,0 +1,34 @@
+program: train.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - --config-name=train_diffusion_unet_lowdim_workspace.yaml
+  - training.device=cuda:0
+  - ${args_no_hyphens}
+method: grid
+parameters:
+  task:
+    value:
+      - can_lowdim_abs
+  training.seed:
+    values:
+     - 42
+     - 43
+     - 44
+  task.dataset.max_train_episodes:
+    values:
+     - 10
+     - 20
+     - 40
+     - 90
+  global_cond_noise:
+    values:
+     - 0
+     - 0.01
+     - 0.05
+     - 0.1
+     - 0.3
+     - 0.5
+     - 0.8
+     - 1
