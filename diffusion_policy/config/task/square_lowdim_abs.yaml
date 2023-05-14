@@ -15,12 +15,12 @@ env_runner:
   _target_: diffusion_policy.env_runner.robomimic_lowdim_runner.RobomimicLowdimRunner
   dataset_path: *dataset_path
   obs_keys: *obs_keys
-  n_train: 6
-  n_train_vis: 2
+  n_train: 1
+  n_train_vis: 0
   train_start_idx: 0
-  n_test: 50
-  n_test_vis: 4
-  test_start_seed: 100000
+  n_test: 22
+  n_test_vis: 0
+  test_start_seed: ${eval:'100000*(1 + ${training.seed})'}
   # use python's eval function as resolver, single-quoted string as argument
   max_steps: ${eval:'500 if "${task.dataset_type}" == "mh" else 400'}
   n_obs_steps: ${n_obs_steps}
@@ -44,4 +44,4 @@ dataset:
   use_legacy_normalizer: False
   seed: 42
   val_ratio: 0.02
-  max_train_episodes: null
+  max_train_episodes: 200

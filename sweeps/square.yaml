@@ -9,14 +9,14 @@ command:
 method: grid
 parameters:
   task:
-    value:
-      - pusht_lowdim
+    values:
+      - square_lowdim_abs
   training.num_epochs:
     values:
-     - 800
+     - 1500
   training.rollout_every:
     values:
-     - 200
+     - 250
   training.seed:
     values:
      - 42
@@ -32,10 +32,8 @@ parameters:
   global_cond_noise:
     values:
      - 0
+     - 0.005
+     - 0.01
      - 0.03
-     - 0.05
      - 0.07
      - 0.1
-     - 0.3
-     - 0.5
-     - 1

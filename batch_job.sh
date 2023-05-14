@@ -6,6 +6,6 @@
 #SBATCH --time=12:00:0
 #SBATCH --output=/nobackup/users/dpfrom/logs/batch-%j.log
 #SBATCH --chdir=/nobackup/users/dpfrom/projects/diffusion_policy_pt
-#SBATCH --ntasks=4
+#SBATCH --ntasks=5
 
-srun --ntasks 4 bash run_wandb_agent.sh $1 $2
+srun --ntasks 5 bash run_wandb_agent.sh $1 $2
