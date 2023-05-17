@@ -1,3 +1,24 @@
+# Diffusion Policies
+
+This is a modified version of the diffusion policies repository.
+
+See the instructions below for setting up a development environment.
+
+We use the wandb sweep utility to run sweeps. The sweep configuration information can be found
+in the sweeps/ directory. To launch each the sweeps, enable the conda environment and run
+
+```bash
+wandb sweep sweeps/can.yaml
+```
+```bash
+wandb sweep sweeps/pusht.yaml
+```
+```bash
+wandb sweep sweeps/square.yaml
+```
+
+# Original README:
+
 # Diffusion Policy
 
 [[Project page]](https://diffusion-policy.cs.columbia.edu/)
